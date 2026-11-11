@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+const base='http://127.0.0.1:5173';
+let r=await fetch(base+'/api/account');assert.equal(r.status,401);
+const signin=await fetch(base+'/signin-with-chatgpt?return_to=/dashboard.html',{redirect:'manual'});assert.equal(signin.status,302);const cookie=signin.headers.get('set-cookie').split(';')[0];
+const headers={Cookie:cookie,Origin:base,'Content-Type':'application/json'};
+let data=await (await fetch(base+'/api/account',{headers})).json();assert(data.user);const profile={name:'Test Athlete',age:28,sex:'Prefer not to say',weight:75,height:175,goal:'Build strength',experience:'Beginner',days:3,minutes:30,equipment:'Bodyweight',limitations:'None',consent:true};
+const state={name:'Test Athlete',goal:2400,protein:160,water:0,meals:[],sessions:[],connections:{},sleep:0,soreness:1,rest:'Sunday',diet:'All',allergy:'None',sync:null,logDate:'2026-10-28',mealHistory:[]};
+const put=(body,h=headers)=>fetch(base+'/api/account',{method:'PUT',headers:h,body:JSON.stringify(body)});
+assert.equal((await put({version:data.version,profile:{...profile,age:15},state})).status,400);
+assert.equal((await put({version:data.version,profile,state},{...headers,Origin:'https://other.invalid'})).status,403);
+r=await put({version:data.version,profile,state});assert.equal(r.status,200,await r.clone().text());let saved=await r.json();assert.equal(saved.plan.bmi,24.5);assert.equal(saved.plan.week.filter(x=>x.kind!=='rest').length,3);assert(saved.plan.week.filter(x=>x.kind==='strength').every(x=>x.exercises.includes('Chair squat')));
+assert.equal((await put({version:data.version,profile,state})).status,409);
+state.meals.push({name:'Test meal',cal:400,p:25,c:40,f:15,type:'Lunch'});r=await put({version:saved.version,profile,state});assert.equal(r.status,200);saved=await r.json();
+data=await (await fetch(base+'/api/account',{headers})).json();assert.equal(data.state.meals[0].name,'Test meal');assert.equal(data.version,saved.version);
+assert.equal((await fetch(base+'/api/account',{headers:{'oai-authenticated-user-id':'fake','oai-authenticated-user-email':'fake@example.com'}})).status,401);
+const home=await (await fetch(base)).text();assert(home.includes('Continue with ChatGPT'));const dashboard=await (await fetch(base+'/dashboard.html')).text();assert(dashboard.includes('account.js'));
+console.log('PASS: sign-in required, local auth, age validation, origin protection, profile creation, BMI, personalized plan, stale-write conflict, database reread, spoofed-header rejection, page delivery.');
